@@ -1,0 +1,12 @@
+node_modules/
+.env
+dist/
+
+# Playwright
+playwright-report/
+test-results/
+playwright/.auth/
+.playwright-carpal-profile/
+
+# Recordings (raw, unenhanced — enhanced specs go to tests/)
+recordings/
