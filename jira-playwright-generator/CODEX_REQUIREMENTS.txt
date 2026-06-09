@@ -1,0 +1,308 @@
+JIRA TO PLAYWRIGHT GENERATOR - LOCAL SETUP REQUIREMENTS FOR CODEX
+=================================================================
+
+Goal
+----
+Install and run a local TypeScript system that:
+1. Fetches Jira test cases written in this format:
+   - Pre-req:
+   - Steps:
+   - Expected Result:
+2. Parses the natural-language test case.
+3. Generates executable Playwright web automation scripts.
+4. Runs the generated tests locally.
+
+Project ZIP
+-----------
+Use the provided project archive:
+
+jira-playwright-generator.zip
+
+After extraction, the project folder should be:
+
+jira-playwright-generator/
+
+System prerequisites
+--------------------
+Install these before running the project:
+
+1. Node.js LTS
+   - Required because this project is written in TypeScript and runs through npm scripts.
+   - Recommended: latest Node.js LTS from the official Node.js website.
+   - Verify installation:
+
+     node -v
+     npm -v
+
+2. Git, optional but recommended
+   - Useful if this project will be committed to a repository.
+   - Verify installation:
+
+     git --version
+
+3. Playwright browser dependencies
+   - Playwright will install browser binaries using:
+
+     npx playwright install
+
+   - On Linux, also install OS-level browser dependencies using:
+
+     npx playwright install --with-deps
+
+Project npm dependencies
+------------------------
+The project already contains package.json and package-lock.json.
+Codex should run:
+
+npm install
+
+The dependencies are:
+
+Runtime dependencies:
+- @playwright/test
+- axios
+- dotenv
+- tsx
+- typescript
+
+Development dependencies:
+- @types/node
+
+Environment variables
+---------------------
+Create a .env file in the project root.
+Start by copying the example file:
+
+cp .env.example .env
+
+Then update the .env file with real values:
+
+JIRA_BASE_URL=https://your-domain.atlassian.net
+JIRA_EMAIL=your-email@company.com
+JIRA_API_TOKEN=your-jira-api-token
+JIRA_JQL=project = QA AND issuetype = "Test Case" AND status != Done
+BASE_APP_URL=https://your-web-app-url.com
+JIRA_FIELDS=summary,description
+
+Environment variable meanings:
+
+JIRA_BASE_URL
+- Your Jira Cloud base URL.
+- Example: https://company.atlassian.net
+
+JIRA_EMAIL
+- Jira account email address.
+
+JIRA_API_TOKEN
+- Jira API token for the Jira user.
+- Do not hardcode this in source files.
+- Keep it only in .env.
+
+JIRA_JQL
+- JQL query used to fetch test cases from Jira.
+- Example:
+  project = QA AND issuetype = "Test Case" AND status != Done
+
+BASE_APP_URL
+- Base URL of the web application under test.
+- Example:
+  https://staging.example.com
+
+JIRA_FIELDS
+- Comma-separated Jira fields to fetch.
+- Default:
+  summary,description
+
+Install commands
+----------------
+From the extracted project folder, run:
+
+cd jira-playwright-generator
+npm install
+npx playwright install
+
+For Linux environments, prefer:
+
+cd jira-playwright-generator
+npm install
+npx playwright install --with-deps
+
+Local sample run without Jira
+-----------------------------
+Use this first to confirm the project works before connecting Jira:
+
+npm run generate:sample
+npm run test:e2e
+
+This generates a sample Playwright test from the example format and runs it.
+
+Generate tests from Jira
+------------------------
+After .env is filled correctly, run:
+
+npm run generate
+
+Generated Playwright test files will be created in:
+
+generated-tests/
+
+Run generated tests
+-------------------
+Headless mode:
+
+npm run test:e2e
+
+Headed browser mode:
+
+npm run test:e2e:headed
+
+Playwright UI mode:
+
+npm run test:e2e:ui
+
+Show HTML report:
+
+npm run report
+
+Expected project scripts
+------------------------
+These npm scripts should exist in package.json:
+
+npm run generate
+- Fetches Jira issues and generates Playwright specs.
+
+npm run generate:sample
+- Generates a Playwright spec using the local sample test case.
+
+npm run test:e2e
+- Runs generated Playwright tests headlessly.
+
+npm run test:e2e:headed
+- Runs generated Playwright tests in a visible browser.
+
+npm run test:e2e:ui
+- Opens Playwright UI mode.
+
+npm run report
+- Opens the latest Playwright HTML report.
+
+Expected Jira test case format
+------------------------------
+The parser expects Jira descriptions to contain this structure:
+
+Pre-req: Browser should be opened and application URL should be accessible
+
+Steps:
+When Fresh web app is launched, click on Next button on "Improve Your Morning, Love your life" screen.
+Again click on "Next" button on 6 quick routines to win everyday.
+Now click on "Login" button. Login screen should appear
+Now Enter the email -> mmqa100@mailinator.com
+Enter password -> Dpl@1234
+Click on Login button.
+User should see the Reminder screen, Click on Next.
+A Modal will appear Click "OK" on that
+
+Expected Result:
+User should land on home screen with a tooltip appearing with partial text: "Tip: Quickly access tracks and activities"
+
+Generated Playwright behavior
+-----------------------------
+The generator maps natural-language steps to Playwright actions.
+
+Examples:
+
+"When app/site is launched"
+-> page.goto("/")
+
+"click on Next button"
+-> page.getByRole("button", { name: /Next/i }).click()
+
+"Login screen should appear"
+-> expect(page.getByText("Login")).toBeVisible()
+
+"Enter the email -> user@example.com"
+-> page.getByLabel(/email|username/i).fill("user@example.com")
+
+"Enter password -> Secret123"
+-> page.getByLabel(/password/i).fill("Secret123")
+
+"partial text: \"Tip: Quickly access tracks and activities\""
+-> expect(page.getByText(/Tip: Quickly access tracks and activities/i)).toBeVisible()
+
+Selector strategy
+-----------------
+Generated tests try selectors in this approximate priority:
+
+1. Accessible labels
+2. Accessible roles, especially buttons
+3. Placeholder text
+4. data-testid
+5. Visible text fallback
+
+For stable automation, the web app should use accessible labels and/or data-testid attributes.
+
+Recommended web app attributes
+------------------------------
+Where possible, add stable attributes to the app under test:
+
+<input data-testid="email" aria-label="Email" />
+<input data-testid="password" aria-label="Password" />
+<button data-testid="login-button">Login</button>
+
+Common troubleshooting
+----------------------
+Problem: npm install fails
+Fix:
+- Confirm Node.js and npm are installed.
+- Run:
+  node -v
+  npm -v
+
+Problem: Playwright browsers are missing
+Fix:
+- Run:
+  npx playwright install
+
+Problem: Linux browser dependencies are missing
+Fix:
+- Run:
+  npx playwright install --with-deps
+
+Problem: Jira generation fails with 401 Unauthorized
+Fix:
+- Check JIRA_EMAIL and JIRA_API_TOKEN.
+- Confirm the Jira user has access to the target project.
+
+Problem: Jira returns no test cases
+Fix:
+- Check JIRA_JQL.
+- Try a broader JQL first:
+  project = QA
+
+Problem: Generated test cannot find a button or input
+Fix:
+- Add stable accessible labels, roles, placeholders, or data-testid attributes in the web app.
+- Update parser/generator selector logic if your application uses custom components.
+
+Security notes
+--------------
+Do not commit .env to Git.
+Do not hardcode Jira tokens in source files.
+Do not use eval or execute AI-generated raw code directly.
+This project should generate structured Playwright code only from allowed action mappings.
+
+Recommended Codex task
+----------------------
+Codex should perform the following steps:
+
+1. Extract jira-playwright-generator.zip.
+2. Open the extracted jira-playwright-generator folder.
+3. Install Node.js LTS if node is unavailable.
+4. Run npm install.
+5. Run npx playwright install, or npx playwright install --with-deps on Linux.
+6. Copy .env.example to .env.
+7. Ask the user for Jira URL, Jira email, Jira API token, Jira JQL, and BASE_APP_URL if .env values are missing.
+8. Run npm run generate:sample to verify local generation.
+9. Run npm run test:e2e to verify Playwright execution.
+10. After .env is configured, run npm run generate to fetch Jira test cases and generate Playwright specs.
+11. Run npm run test:e2e to execute generated tests.

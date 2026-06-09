@@ -1,0 +1,13 @@
+node_modules
+.env
+playwright-report
+test-results
+.playwright-carpal-profile
+.DS_Store
+dist
+
+# Auth state — contains session tokens, never commit
+playwright/.auth/
+
+# Generated reports
+reports/

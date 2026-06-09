@@ -1,0 +1,33 @@
+{
+  "name": "jira-playwright-generator",
+  "version": "1.0.0",
+  "description": "Generate Playwright tests from Jira test cases written in Pre-req / Steps / Expected Result format.",
+  "type": "module",
+  "scripts": {
+    "generate": "tsx src/index.ts",
+    "generate:sample": "tsx src/sample-run.ts",
+    "sample-app": "tsx src/sample-app-server.ts",
+    "test:e2e": "playwright test generated-tests",
+    "test:e2e:headed": "playwright test generated-tests --headed",
+    "test:e2e:ui": "playwright test generated-tests --ui",
+    "test:carpal": "playwright test --config playwright.config.carpal.ts",
+    "test:carpal:headed": "playwright test --config playwright.config.carpal.ts --headed",
+    "report": "playwright show-report",
+    "agent:architect": "tsx src/agents/framework-architect.ts",
+    "agent:architect:ai": "tsx src/agents/framework-architect.ts --ai",
+    "agent:generate": "tsx src/agents/automation-generator.ts",
+    "agent:enhance": "tsx src/agents/recorder-enhancer.ts",
+    "recorder": "node scripts/open-recorder.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "latest",
+    "@playwright/test": "latest",
+    "axios": "latest",
+    "dotenv": "latest",
+    "tsx": "latest",
+    "typescript": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest"
+  }
+}
