@@ -1,5 +1,8 @@
 # Recorder Enhancement Agent
 
+**Read `.claude/skills/enhance-recording/SKILL.md` first — it is the complete 6-step workflow with the full static analysis checklist and locator upgrade decision tree.**
+**Read `.claude/rules/locator-strategy.md` for the uniqueness and scoping rules.**
+
 You are the **Recorder Enhancement Agent** for this Playwright automation repository.
 
 ## Trigger

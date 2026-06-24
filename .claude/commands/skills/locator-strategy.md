@@ -1,89 +1,89 @@
 # Locator Strategy Reference
 
+**Full rules: `.claude/rules/locator-strategy.md`**
+
 Use this skill when: choosing a locator for a new element, reviewing locators, or understanding why a locator was written a certain way.
 
-## Priority Order (always prefer higher)
+## Core rule: count before storing
+
+Every selector MUST resolve to exactly 1 element. Verify with `page.locator('...').count() === 1` before writing it to a locator file.
+
+## Priority Order (highest → lowest)
 
 | Priority | Method | When to use |
 |---|---|---|
-| 1 | `getByTestId("value")` | Element has `data-testid` attribute — most stable |
-| 2 | `getByRole("button", { name: /text/i })` | Buttons, links, headings, inputs with accessible labels |
-| 3 | `getByLabel(/label text/i)` | Form fields with visible `<label>` elements |
-| 4 | `getByPlaceholder(/placeholder/i)` | Unlabelled inputs with placeholder text |
-| 5 | `locator('[name="fieldName"]')` | Angular form fields with `name` attribute |
-| 6 | `locator('ng-select[name="fieldName"]')` | Angular ng-select dropdowns |
-| 7 | `getByText("visible text")` | **Assertions only** — last resort for interactions |
+| 1 | `getByTestId("value")` | Element has `data-testid` attribute |
+| 2 | `locator('[name="x"]')` / `locator('#id')` | Unique `name` or `id` — **verify count === 1** |
+| 3 | `getByRole("button", { name: "...", exact: true })` | **count === 1** only |
+| 4 | `getByLabel("...")` | **count === 1** only |
+| 5 | `getByPlaceholder("...")` | **count === 1** only |
+| 6 | Ancestor-scoped | `ng-select[formcontrolname="x"]`, `label:has-text("X") ~ ng-select`, XPath with ancestor |
+| 7 | Parameterized arrow function | Any visible string → `(name: string) => page.getByRole('tab', { name })` |
+| 8 | `.nth()` inside scoped container | Last resort — document why; never global |
 
-## Examples
+## Banned patterns
 
-```typescript
-// ✓ Preferred: semantic role
-page.getByRole("button", { name: /Create Vehicle/i })
-page.getByRole("link", { name: "Create Case", exact: true })
-page.getByRole("heading", { name: "Create Vehicle" })
-page.getByRole("tab", { name: "Customer Details" })
+| Banned | Replacement |
+|---|---|
+| `.ng-invalid` / `.ng-touched` / `.ng-dirty` / `.ng-pristine` | `[formcontrolname="x"]` or label-scoped |
+| Global `ng-select.nth(0)` / `.nth(1)` | `ng-select[formcontrolname="brand"]` or label XPath |
+| CSS chain > 60 chars | Break into ancestor + scoped child |
+| `/html/body/...` absolute XPath | Relative XPath anchored to stable element |
+| Hardcoded visible string in locator | Arrow function parameter |
 
-// ✓ Preferred: label
-page.getByLabel(/VIN/i)
-page.getByLabel("Mileage")
+## ng-select root locator — decision tree
 
-// ✓ Acceptable: name attribute (Angular forms)
-page.locator('input[name="userName"]')
-page.locator('button[type="submit"]')
-page.locator('textarea[name="remarks"]')
-page.locator('ng-select[name="modelYear"]')
-
-// ✓ Acceptable: textbox role with name
-page.getByRole("textbox", { name: "VIN *" })
-page.getByRole("textbox", { name: "Plate Category Code / Plate" })
-
-// ✗ Forbidden: long CSS chain
-page.locator('.ng-select.ng-select-single.ng-select-searchable .ng-select-container .ng-value-container')
-
-// ✗ Forbidden: absolute XPath
-page.locator('//div[@class="form"]/input[2]')
-
-// ✗ Forbidden: nth() on non-semantic locator
-page.locator('button').nth(3)
-
-// ✓ Exception: nth() with semantic context (documented CarPal quirk)
-page.locator('ng-select[name="brand"]').nth(0)  // brand make
-page.locator('ng-select[name="brand"]').nth(1)  // brand model
+```
+Has formcontrolname attr?   → ng-select[formcontrolname="x"]
+Has unique name attr?       → ng-select[name="x"]  (count check!)
+Has a visible label?        → label:has-text("Label") ~ ng-select
+Inside Angular component?   → app-component ng-select
+None of above?              → xpath=//label[normalize-space()="Label"]/ancestor::div[1]//ng-select
 ```
 
-## CarPal-Specific Locators
+**Never use ng-select internal classes** (`.ng-arrow-wrapper`, `.ng-select-container`, `.ng-option`, `.ng-value-label`) as the root locator. These are only used INSIDE `NgSelectComponent`.
 
-CarPal uses Angular with `ng-select` dropdowns for all selects. Always use `NgSelectComponent`:
+## CarPal brand/model problem
+
+Both brand and model dropdowns share `name="brand"` — a known app issue.
 
 ```typescript
-import { NgSelectComponent } from "../../components/ng-select.component"
+// BAD — positional, breaks on reorder
+brandSelect: page.locator('ng-select[name="brand"]').nth(0)
+modelSelect: page.locator('ng-select[name="brand"]').nth(1)
 
-const select = new NgSelectComponent(page, page.locator('ng-select[name="countries"]'))
-await select.pick("Pakistan", "pak")         // searches "pak", clicks "Pakistan"
-await select.pickOptional("islamabad")        // graceful — won't fail if not found
-await select.clear()                         // clears the selection
-await select.getValue()                      // returns current value text
+// GOOD — use formcontrolname (check DOM) or label XPath
+brandSelect: page.locator('ng-select[formcontrolname="brand"]')
+modelSelect: page.locator('ng-select[formcontrolname="model"]')
+// OR:
+brandSelect: page.locator('xpath=//label[normalize-space()="Brand"]/ancestor::div[1]//ng-select')
+modelSelect: page.locator('xpath=//label[normalize-space()="Model"]/ancestor::div[1]//ng-select')
+```
+Verify via DOM snapshot (MCP `browser_snapshot`) before committing.
+
+## NgSelectComponent usage
+
+```typescript
+import { NgSelectComponent } from "../../src/components/ng-select.component";
+
+await new NgSelectComponent(page, l.brandSelect).pick('Acura');
+await new NgSelectComponent(page, l.countriesSelect).pick('Pakistan', 'pak');
+await new NgSelectComponent(page, l.citiesSelect).pickOptional('islamabad');
+const value = await new NgSelectComponent(page, l.brandSelect).getValue();
 ```
 
-## Where to Store Locators
+## Where to store locators
 
-All locators live in `src/locators/{feature}/{feature}.locators.ts` as factory functions:
-
+`src/locators/{feature}/{feature}.locators.ts` — factory function pattern:
 ```typescript
-// src/locators/vehicle/vehicle.locators.ts
-import type { Page } from "@playwright/test"
-
+import type { Page } from "@playwright/test";
 export const vehicleLocators = (page: Page) => ({
-  vinInput: page.getByRole("textbox", { name: "VIN *" }),
-  brandSelect: page.locator('ng-select[name="brand"]').nth(0),
-  // ...
-})
+  pageHeading: page.getByRole("heading", { name: "Create Vehicle" }),
+  vinInput: page.getByLabel("VIN *"),
+  brandSelect: page.locator('ng-select[formcontrolname="brand"]'), // TODO_VERIFY_DOM
+  tab: (name: string) => page.getByRole("tab", { name }),
+});
+export type VehicleLocators = ReturnType<typeof vehicleLocators>;
 ```
 
-Page objects and helpers receive locators by calling the factory:
-```typescript
-const l = vehicleLocators(this.page)
-await l.vinInput.fill(vin)
-```
-
-Never define locators inline in test spec files or helpers.
+Never define locators inline in helpers, pages, or specs.

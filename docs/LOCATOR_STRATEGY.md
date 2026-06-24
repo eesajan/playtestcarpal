@@ -1,52 +1,80 @@
 # Locator Strategy
 
-See also: `/skills:locator-strategy` for a quick reference.
+Full rules: `.claude/rules/locator-strategy.md` | Quick ref: `/skills:locator-strategy`
+
+## Core rule: count before storing
+
+Every selector MUST resolve to exactly 1 element. Verify uniqueness before writing to a locator file. If count > 1, add ancestor scoping until count === 1.
 
 ## Priority Order
 
-1. **`getByTestId("value")`** — requires `data-testid` attribute in the app. Most stable if available.
-2. **`getByRole("button", { name: /text/i })`** — semantic, robust, maps to ARIA roles.
-3. **`getByLabel(/label text/i)`** — for form fields with visible `<label>`.
-4. **`getByPlaceholder(/placeholder/i)`** — fallback for unlabelled inputs.
-5. **`getByRole("textbox", { name: "VIN *" })`** — textbox with accessible name.
-6. **`locator('[name="fieldName"]')`** — Angular form fields with `name` attribute.
-7. **`locator('ng-select[name="fieldName"]')`** — Angular ng-select with name.
-8. **`getByText("visible text")`** — **assertions only**, last resort for interactions.
+1. **`getByTestId("value")`** — requires `data-testid`. Most stable.
+2. **Unique `name` / `id`** — `locator('[name="userName"]')` — **verify count === 1**
+3. **`getByRole` + exact name** — `getByRole("button", { name: "Submit", exact: true })` — **count === 1 only**
+4. **`getByLabel`** — form fields with visible `<label>` — **count === 1 only**
+5. **`getByPlaceholder`** — unlabelled inputs — **count === 1 only**
+6. **Ancestor-scoped** — when above are non-unique:
+   - `ng-select[formcontrolname="brand"]`
+   - `label:has-text("Brand") ~ ng-select`
+   - `xpath=//label[normalize-space()="Brand"]/ancestor::div[contains(@class,"form-group")][1]//ng-select`
+   - `app-vehicle-form ng-select[formcontrolname="brand"]`
+7. **Parameterized arrow function** — ANY visible string (tab name, option, heading, row content):
+   ```ts
+   tab: (name: string) => page.getByRole("tab", { name })
+   ```
+8. **Controlled `.nth()` inside a scoped stable container** — last resort, document why
 
-## Forbidden Patterns
+## Banned Patterns
 
-| Pattern | Why Forbidden | Alternative |
+| Pattern | Why Banned | Replacement |
 |---|---|---|
-| `.ng-select.ng-select-single.ng-select-searchable .ng-select-container` (> 60 chars) | Breaks on minor Angular upgrade | `locator('ng-select[name="..."]')` |
-| `//div[@class="form"]/input[2]` | Breaks on DOM reorder | `getByRole` or `getByLabel` |
-| `page.locator('button').nth(3)` | Index changes with DOM changes | `getByRole("button", { name: /text/i })` |
+| `ng-select.ng-invalid` / `.ng-touched` / `.ng-dirty` | CSS validation **state** — changes as user fills form | `[formcontrolname="x"]` or label-scoped |
+| `ng-select[name="brand"].nth(0)` / `.nth(1)` globally | Positional — breaks on DOM reorder | `[formcontrolname="brand"]` or label XPath |
+| CSS chain > 60 chars | Brittle, unreadable | Ancestor + scoped child |
+| `/html/body/...` absolute XPath | Breaks on restructure | Relative XPath from stable anchor |
+| Hardcoded visible string in non-parameterized locator | Breaks on copy change | Arrow function parameter |
+| `.ng-arrow-wrapper` / `.ng-select-container` / `.ng-option` as root | Internal ng-select impl | Use `NgSelectComponent` — root `<ng-select>` only |
 
-## CarPal-Specific Locators
+## CarPal-Specific: brand/model problem
+
+Both brand and model share `name="brand"` (app bug). Positional `.nth()` is banned.
+
+```typescript
+// BAD — banned
+brandSelect: page.locator('ng-select[name="brand"]').nth(0)
+modelSelect: page.locator('ng-select[name="brand"]').nth(1)
+
+// GOOD — capture DOM snapshot to confirm formcontrolname values
+brandSelect: page.locator('ng-select[formcontrolname="brand"]')
+modelSelect: page.locator('ng-select[formcontrolname="model"]')
+// OR label-scoped XPath:
+brandSelect: page.locator('xpath=//label[normalize-space()="Brand"]/ancestor::div[contains(@class,"form-group")][1]//ng-select')
+modelSelect: page.locator('xpath=//label[normalize-space()="Model"]/ancestor::div[contains(@class,"form-group")][1]//ng-select')
+```
+
+## Stable CarPal Locators (verified)
 
 ### Login Form
 ```typescript
-page.locator('input[name="userName"]')
-page.locator('input[name="password"]')
-page.locator('button[type="submit"]')
+page.locator('input[name="userName"]')        // unique name on page
+page.locator('input[name="password"]')        // unique name on page
+page.locator('button[type="submit"]')         // unique type on page
 ```
 
 ### Dashboard
 ```typescript
 page.getByRole("link", { name: "Create Case", exact: true })
 page.getByRole("button", { name: "Create a Temporary" })
-page.getByText(/Hi .+!/i)
+page.getByText(/Hi .+!/i)                     // assertions only
 ```
 
 ### Vehicle Form
 ```typescript
-// ng-selects
 page.locator('ng-select[name="subclient"]')
-page.locator('ng-select[name="brand"]').nth(0)   // make (CarPal quirk: brand = make)
-page.locator('ng-select[name="brand"]').nth(1)   // model (CarPal quirk: brand = model)
+// brand/model: capture DOM to confirm formcontrolname — see CarPal brand/model problem above
 page.locator('ng-select[name="modelYear"]')
 page.locator('ng-select[name="countries"]')
 page.locator('ng-select[name="cities"]')
-// text inputs
 page.getByRole("textbox", { name: "VIN *" })
 page.getByRole("textbox", { name: "Plate Category Code / Plate" })
 page.getByRole("textbox", { name: "Mileage" })
@@ -56,50 +84,54 @@ page.locator('textarea[name="remarks"]')
 
 ### Case Form
 ```typescript
-page.getByRole("tab", { name: "Customer Details" })
-page.locator("#countryCode")                                    // country code ng-select
-page.locator(".phone-number-field")
+page.getByRole("tab", { name })               // parameterized
+page.locator("#countryCode")                  // unique id
 page.getByRole("textbox", { name: "Search for a location" })
-page.locator("ng-select.ng-invalid").first()                   // issue type
-page.locator('[aria-label="Notification"]')                    // toast
+page.locator('[aria-label="Notification"]')   // toast
+// issue type: capture DOM — replace with page.locator('ng-select[formcontrolname="issueType"]')
+// payment: capture DOM — replace with page.locator('ng-select[formcontrolname="paymentMethod"]')
 ```
 
 ## ng-select Pattern
 
-Always use `NgSelectComponent`:
+Always use `NgSelectComponent` for every `<ng-select>` interaction:
 
 ```typescript
-import { NgSelectComponent } from "../../components/ng-select.component"
+import { NgSelectComponent } from "../../src/components/ng-select.component";
 
-// Create a wrapper
-const brandSelect = new NgSelectComponent(page, vehicleLocators(page).brandSelect)
+await new NgSelectComponent(page, l.brandSelect).pick("Acura");
+await new NgSelectComponent(page, l.countriesSelect).pick("Pakistan", "pak");
+await new NgSelectComponent(page, l.citiesSelect).pickOptional("islamabad");
+await new NgSelectComponent(page, l.brandSelect).clear();
+const value = await new NgSelectComponent(page, l.brandSelect).getValue();
+```
 
-// Required selection (throws if option not found)
-await brandSelect.pick("Acura")
-await brandSelect.pick("Pakistan", "pak")    // searches "pak", selects "Pakistan"
+The locator passed to `NgSelectComponent` must be the root `<ng-select>` element — never an internal child.
 
-// Optional selection (graceful fallback)
-await brandSelect.pickOptional("islamabad", "Islamabad")
+## ng-select root locator decision tree
 
-// Clear current value
-await brandSelect.clear()
-
-// Read current value
-const current = await brandSelect.getValue()
+```
+Has formcontrolname?     → ng-select[formcontrolname="x"]
+Has unique name?         → ng-select[name="x"]  (count check!)
+Has visible label?       → label:has-text("X") ~ ng-select  OR  label XPath
+Inside Angular component? → app-component ng-select
 ```
 
 ## Where Locators Live
 
-All locators are factory functions in `src/locators/{feature}/{feature}.locators.ts`:
+Factory functions in `src/locators/{feature}/{feature}.locators.ts`:
 
 ```typescript
+import type { Page } from "@playwright/test";
+
 export const vehicleLocators = (page: Page) => ({
-  vinInput: page.getByRole("textbox", { name: "VIN *" }),
-  brandSelect: page.locator('ng-select[name="brand"]').nth(0),
-})
+  pageHeading: page.getByRole("heading", { name: "Create Vehicle" }),
+  vinInput: page.getByLabel("VIN *"),
+  brandSelect: page.locator('ng-select[formcontrolname="brand"]'), // TODO_VERIFY_DOM
+  tab: (name: string) => page.getByRole("tab", { name }),
+});
+
+export type VehicleLocators = ReturnType<typeof vehicleLocators>;
 ```
 
-**Never** define locators:
-- Inline in test spec files
-- Inline in helper functions (use the locator factory instead)
-- As class properties in page objects (import from the locator file instead)
+**Never** define locators inline in specs, helpers, or page objects.
